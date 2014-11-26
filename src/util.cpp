@@ -947,7 +947,7 @@ boost::filesystem::path GetDefaultDataDir()
     // Unix: ~/.bitcoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "Bitcoin";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "Redddcoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -959,10 +959,10 @@ boost::filesystem::path GetDefaultDataDir()
     // Mac
     pathRet /= "Library/Application Support";
     TryCreateDirectory(pathRet);
-    return pathRet / "Bitcoin";
+    return pathRet / "Redddcoin";
 #else
     // Unix
-    return pathRet / ".bitcoin";
+    return pathRet / ".redddcoin";
 #endif
 #endif
 }
@@ -1011,7 +1011,7 @@ void ClearDatadirCache()
 
 boost::filesystem::path GetConfigFile()
 {
-    boost::filesystem::path pathConfigFile(GetArg("-conf", "bitcoin.conf"));
+    boost::filesystem::path pathConfigFile(GetArg("-conf", "reddcoin.conf"));
     if (!pathConfigFile.is_complete()) pathConfigFile = GetDataDir(false) / pathConfigFile;
     return pathConfigFile;
 }
@@ -1044,7 +1044,7 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
 
 boost::filesystem::path GetPidFile()
 {
-    boost::filesystem::path pathPidFile(GetArg("-pid", "bitcoind.pid"));
+    boost::filesystem::path pathPidFile(GetArg("-pid", "reddcoind.pid"));
     if (!pathPidFile.is_complete()) pathPidFile = GetDataDir() / pathPidFile;
     return pathPidFile;
 }
@@ -1414,11 +1414,11 @@ void SetupEnvironment()
     #ifndef WIN32
     try
     {
-	#if BOOST_FILESYSTEM_VERSION == 3
+        #if BOOST_FILESYSTEM_VERSION == 3
             boost::filesystem::path::codecvt(); // Raises runtime error if current locale is invalid
-	#else				          // boost filesystem v2
+        #else                         // boost filesystem v2
             std::locale();                      // Raises runtime error if current locale is invalid
-	#endif
+        #endif
     } catch(std::runtime_error &e)
     {
         setenv("LC_ALL", "C", 1); // Force C locale

@@ -39,6 +39,12 @@ public:
         bnProofOfWorkLimit = CBigNum(~uint256(0) >> 32);
         nSubsidyHalvingInterval = 210000;
 
+        // PoSV
+        bnProofOfStakeLimit = CBigNum(~uint256(0) >> 32);
+        nLastProofOfWorkHeight = 720; // 12 hours worth of newly mined blocks
+        nStakeMinAge = 8 * 60 * 60; // 8 hours
+        nStakeMaxAge = 45 * 24 *  60 * 60; // 45 days
+
         // Build the genesis block. Note that the output of the genesis coinbase cannot
         // be spent as it did not originally exist in the database.
         //

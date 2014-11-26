@@ -66,6 +66,12 @@ public:
     const std::vector<unsigned char> &Base58Prefix(Base58Type type) const { return base58Prefixes[type]; }
     virtual const vector<CAddress>& FixedSeeds() const = 0;
     int RPCPort() const { return nRPCPort; }
+
+    // PoSV
+    const CBigNum& ProofOfStakeLimit() const { return bnProofOfStakeLimit; }
+    int LastProofOfWorkHeight() const { return nLastProofOfWorkHeight; }
+    unsigned int StakeMinAge() const { return nStakeMinAge; }
+    unsigned int StakeMaxAge() const { return nStakeMaxAge; }
 protected:
     CChainParams() {}
 
@@ -80,6 +86,12 @@ protected:
     string strDataDir;
     vector<CDNSSeedData> vSeeds;
     std::vector<unsigned char> base58Prefixes[MAX_BASE58_TYPES];
+
+    // PoSV
+    CBigNum bnProofOfStakeLimit;
+    int nLastProofOfWorkHeight;
+    unsigned int nStakeMinAge;
+    unsigned int nStakeMaxAge;
 };
 
 /**
