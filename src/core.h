@@ -188,11 +188,12 @@ class CTransaction
 public:
     static int64_t nMinTxFee;
     static int64_t nMinRelayTxFee;
-    static const int CURRENT_VERSION=1;
+    static const int CURRENT_VERSION=2;
     int nVersion;
     std::vector<CTxIn> vin;
     std::vector<CTxOut> vout;
     unsigned int nLockTime;
+    unsigned int nTime;
 
     CTransaction()
     {
@@ -206,6 +207,7 @@ public:
         READWRITE(vin);
         READWRITE(vout);
         READWRITE(nLockTime);
+        READWRITE(nTime);
     )
 
     void SetNull()
@@ -214,6 +216,7 @@ public:
         vin.clear();
         vout.clear();
         nLockTime = 0;
+        nTime = 0;
     }
 
     bool IsNull() const
@@ -242,7 +245,8 @@ public:
         return (a.nVersion  == b.nVersion &&
                 a.vin       == b.vin &&
                 a.vout      == b.vout &&
-                a.nLockTime == b.nLockTime);
+                a.nLockTime == b.nLockTime &&
+                a.nTime     == b.nTime);
     }
 
     friend bool operator!=(const CTransaction& a, const CTransaction& b)
@@ -348,7 +352,7 @@ class CBlockHeader
 {
 public:
     // header
-    static const int CURRENT_VERSION=2;
+    static const int CURRENT_VERSION=3;
     int nVersion;
     uint256 hashPrevBlock;
     uint256 hashMerkleRoot;
@@ -402,6 +406,9 @@ public:
     // network and disk
     std::vector<CTransaction> vtx;
 
+    // PoSV: block signature signed by owner of one of the coinstake txouts
+    std::vector<unsigned char> vchBlockSig;
+
     // memory only
     mutable std::vector<uint256> vMerkleTree;
 
@@ -420,6 +427,7 @@ public:
     (
         READWRITE(*(CBlockHeader*)this);
         READWRITE(vtx);
+        READWRITE(vchBlockSig);
     )
 
     void SetNull()
@@ -427,6 +435,7 @@ public:
         CBlockHeader::SetNull();
         vtx.clear();
         vMerkleTree.clear();
+        vchBlockSig.clear();
     }
 
     CBlockHeader GetBlockHeader() const
