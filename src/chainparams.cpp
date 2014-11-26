@@ -36,25 +36,26 @@ public:
         vAlertPubKey = ParseHex("0437b4b0f5d356f205c17ffff6c46dc9ec4680ffb7f8a9a4e6eebcebd5f340d01df00ef304faea7779d97d8f1addbe1e87308ea237aae3ead96e0a736c7e9477a1");
         nDefaultPort = 8864;
         nRPCPort = 8863;
-        bnProofOfWorkLimit = CBigNum(~uint256(0) >> 32);
+        bnProofOfWorkLimit = CBigNum(~uint256(0) >> 20);
         nSubsidyHalvingInterval = 210000;
 
         // PoSV
-        bnProofOfStakeLimit = CBigNum(~uint256(0) >> 32);
-        nLastProofOfWorkHeight = 720; // 12 hours worth of newly mined blocks
+        bnProofOfStakeLimit = CBigNum(~uint256(0) >> 20);
+        nLastProofOfWorkHeight = 720 - 1; // 12 hours worth of newly mined blocks
         nStakeMinAge = 8 * 60 * 60; // 8 hours
         nStakeMaxAge = 45 * 24 *  60 * 60; // 45 days
 
         // Build the genesis block. Note that the output of the genesis coinbase cannot
         // be spent as it did not originally exist in the database.
         //
-        // CBlock(hash=000000000019d6, ver=1, hashPrevBlock=00000000000000, hashMerkleRoot=4a5e1e, nTime=1231006505, nBits=1d00ffff, nNonce=2083236893, vtx=1)
-        //   CTransaction(hash=4a5e1e, ver=1, vin.size=1, vout.size=1, nLockTime=0)
-        //     CTxIn(COutPoint(000000, -1), coinbase 04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73)
+        // CBlock(hash=00000de55efdb3, ver=3, hashPrevBlock=00000000000000, hashMerkleRoot=d843f3, nTime=1417019887, nBits=1e0fffff, nNonce=48149, vtx=1)
+        //   CTransaction(hash=d843f3, ver=2, vin.size=1, vout.size=1, nLockTime=0, nTime=1417019287)
+        //     CTxIn(COutPoint(000000, -1), coinbase 04ffff001d01044c5332362f4e6f762f323031342042617263656c6f6e612773204c696f6e656c204d65737369206265636f6d6573204368616d70696f6e73204c6561677565277320616c6c2d74696d6520746f702073636f726572)
         //     CTxOut(nValue=50.00000000, scriptPubKey=0x5F1DF16B2B704C8A578D0B)
-        //   vMerkleTree: 4a5e1e
-        const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
+        //   vMerkleTree: d843f3
+        const char* pszTimestamp = "26/Nov/2014 Barcelona's Lionel Messi becomes Champions League's all-time top scorer";
         CTransaction txNew;
+        txNew.nTime = 1417019287;
         txNew.vin.resize(1);
         txNew.vout.resize(1);
         txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
@@ -63,14 +64,14 @@ public:
         genesis.vtx.push_back(txNew);
         genesis.hashPrevBlock = 0;
         genesis.hashMerkleRoot = genesis.BuildMerkleTree();
-        genesis.nVersion = 1;
-        genesis.nTime    = 1231006505;
-        genesis.nBits    = 0x1d00ffff;
-        genesis.nNonce   = 2083236893;
+        genesis.nVersion = 3;
+        genesis.nTime    = 1417019887;
+        genesis.nBits    = 0x1e0fffff;
+        genesis.nNonce   = 48149;
 
         hashGenesisBlock = genesis.GetHash();
-        assert(hashGenesisBlock == uint256("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"));
-        assert(genesis.hashMerkleRoot == uint256("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        assert(hashGenesisBlock == uint256("0x00000de55efdb37c30eb93f88c15a81e7774bbb68dadc36597d3bc768a76f1b4"));
+        assert(genesis.hashMerkleRoot == uint256("0xd843f3953f98ff78853f6c80d575c58006b0e5f59622f6671b871c017ba32f1b"));
 
         vSeeds.push_back(CDNSSeedData("reddcoin.com", "seed.reddcoin.com"));
 
@@ -122,16 +123,16 @@ public:
         pchMessageStart[1] = 0x11;
         pchMessageStart[2] = 0x09;
         pchMessageStart[3] = 0x07;
-        vAlertPubKey = ParseHex("04302390343f91cc401d56d68b123028bf52e5fca1939df127f63c6467cdf9c8e2c14b61104cf817d0b780da337893ecc4aaff1309e536162dabbdb45200ca2b0a");
+        vAlertPubKey = ParseHex("048b75ab041ee9965f6f57ee299395c02daf5105f208fc49e908804aad3ace5a77c7f87b3aae74d6698124f20c3d1bea31c9fcdd350c9c61c0113fd988ecfb5c09");
         nDefaultPort = 18864;
         nRPCPort = 18863;
         strDataDir = "testnet3";
 
         // Modify the testnet genesis block so the timestamp is valid for a later start.
-        genesis.nTime = 1296688602;
-        genesis.nNonce = 414098458;
+        genesis.nTime = 1417020487;
+        genesis.nNonce = 518307;
         hashGenesisBlock = genesis.GetHash();
-        assert(hashGenesisBlock == uint256("0x000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
+        assert(hashGenesisBlock == uint256("0x00000ddcf5053d6a729d7efd656f9606c9a3a8dd7ec390a3281e91979c4a69e2"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -159,14 +160,14 @@ public:
         pchMessageStart[2] = 0xb5;
         pchMessageStart[3] = 0xdb;
         nSubsidyHalvingInterval = 150;
-        bnProofOfWorkLimit = CBigNum(~uint256(0) >> 1);
-        genesis.nTime = 1296688602;
+        bnProofOfWorkLimit = bnProofOfStakeLimit = CBigNum(~uint256(0) >> 1);
+        genesis.nTime = 1417021087;
         genesis.nBits = 0x207fffff;
-        genesis.nNonce = 2;
+        genesis.nNonce = 153169;
         hashGenesisBlock = genesis.GetHash();
         nDefaultPort = 19981;
         strDataDir = "regtest";
-        assert(hashGenesisBlock == uint256("0x0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
+        assert(hashGenesisBlock == uint256("0x0000021dbbd61cab9fda0e45a611e9de9c3212d68c5c633ef1cfe41156cf09d0"));
 
         vSeeds.clear();  // Regtest mode doesn't have any DNS seeds.
     }
