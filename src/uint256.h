@@ -11,6 +11,7 @@
 #include <string>
 #include <string.h>
 #include <vector>
+#include <assert.h>
 
 extern const signed char p_util_hexdigit[256]; // defined in util.cpp
 

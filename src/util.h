@@ -322,6 +322,11 @@ inline int64_t GetTimeMicros()
 
 std::string DateTimeStrFormat(const char* pszFormat, int64_t nTime);
 
+inline std::string DateTimeStrFormat(int64_t nTime)
+{
+    return DateTimeStrFormat("%Y-%m-%d %H:%M:%S UTC", nTime);
+}
+
 template<typename T>
 void skipspaces(T& it)
 {

@@ -71,6 +71,12 @@ public:
     // whether transaction is a coinbase
     bool fCoinBase;
 
+    // whether transaction is a coinstake
+    bool fCoinStake;
+
+    // transaction timestamp
+    int64_t nTime;
+
     // unspent transaction outputs; spent outputs are .IsNull(); spent outputs at the end of the array are dropped
     std::vector<CTxOut> vout;
 
@@ -82,12 +88,12 @@ public:
     int nVersion;
 
     // construct a CCoins from a CTransaction, at a given height
-    CCoins(const CTransaction &tx, int nHeightIn) : fCoinBase(tx.IsCoinBase()), vout(tx.vout), nHeight(nHeightIn), nVersion(tx.nVersion) {
+    CCoins(const CTransaction &tx, int nHeightIn) : fCoinBase(tx.IsCoinBase()), fCoinStake(tx.IsCoinStake()), nTime(tx.nTime), vout(tx.vout), nHeight(nHeightIn), nVersion(tx.nVersion) {
         ClearUnspendable();
     }
 
     // empty constructor
-    CCoins() : fCoinBase(false), vout(0), nHeight(0), nVersion(0) { }
+    CCoins() : fCoinBase(false), fCoinStake(false), nTime(0), vout(0), nHeight(0), nVersion(0) { }
 
     // remove spent outputs at the end of vout
     void Cleanup() {
@@ -107,6 +113,8 @@ public:
 
     void swap(CCoins &to) {
         std::swap(to.fCoinBase, fCoinBase);
+        std::swap(to.fCoinStake, fCoinStake);
+        std::swap(to.nTime, nTime);
         to.vout.swap(vout);
         std::swap(to.nHeight, nHeight);
         std::swap(to.nVersion, nVersion);
@@ -117,7 +125,26 @@ public:
          // Empty CCoins objects are always equal.
          if (a.IsPruned() && b.IsPruned())
              return true;
-         return a.fCoinBase == b.fCoinBase &&
+
+        if (fDebug)
+        {
+            if (a.fCoinBase != b.fCoinBase)
+                LogPrintf("CCoins: fCoinBase mismatch\n");
+            if (a.fCoinStake != b.fCoinStake)
+                LogPrintf("CCoins: fCoinStake mismatch\n");
+            if (a.nTime != b.nTime)
+                LogPrintf("CCoins: nTime mismatch\n");
+            if (a.nHeight != b.nHeight)
+                LogPrintf("CCoins: nHeight mismatch\n");
+            if (a.nVersion != b.nVersion)
+                LogPrintf("CCoins: nVersion mismatch\n");
+            if (a.vout != b.vout)
+                LogPrintf("CCoins: vout mismatch\n");
+        }
+
+        return a.fCoinBase == b.fCoinBase &&
+                a.fCoinStake == b.fCoinStake &&
+                a.nTime == b.nTime &&
                 a.nHeight == b.nHeight &&
                 a.nVersion == b.nVersion &&
                 a.vout == b.vout;
@@ -130,6 +157,10 @@ public:
 
     bool IsCoinBase() const {
         return fCoinBase;
+    }
+
+    bool IsCoinStake() const {
+        return fCoinStake;
     }
 
     unsigned int GetSerializeSize(int nType, int nVersion) const {
@@ -152,6 +183,10 @@ public:
                 nSize += ::GetSerializeSize(CTxOutCompressor(REF(vout[i])), nType, nVersion);
         // height
         nSize += ::GetSerializeSize(VARINT(nHeight), nType, nVersion);
+        // tx timestamp
+        nSize += ::GetSerializeSize(VARINT(nTime), nType, nVersion);
+        // coinstake
+        nSize += 1;
         return nSize;
     }
 
@@ -182,6 +217,11 @@ public:
         }
         // coinbase height
         ::Serialize(s, VARINT(nHeight), nType, nVersion);
+        // tx timestamp
+        ::Serialize(s, VARINT(nTime), nType, nVersion);
+        // coinstake
+        unsigned char nCoinStake = fCoinStake ? 1 : 0;
+        ::Serialize(s, nCoinStake, nType, nVersion);
     }
 
     template<typename Stream>
@@ -215,6 +255,12 @@ public:
         }
         // coinbase height
         ::Unserialize(s, VARINT(nHeight), nType, nVersion);
+        // tx timestamp
+        ::Unserialize(s, VARINT(nTime), nType, nVersion);
+        // coinstake
+        unsigned char nCoinStake = 0;
+        ::Unserialize(s, nCoinStake, nType, nVersion);
+        fCoinStake = nCoinStake & 1;
         Cleanup();
     }
 

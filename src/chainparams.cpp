@@ -54,8 +54,7 @@ public:
         //     CTxOut(nValue=50.00000000, scriptPubKey=0x5F1DF16B2B704C8A578D0B)
         //   vMerkleTree: d843f3
         const char* pszTimestamp = "26/Nov/2014 Barcelona's Lionel Messi becomes Champions League's all-time top scorer";
-        CTransaction txNew;
-        txNew.nTime = 1417019287;
+        CTransaction txNew(1417019287);
         txNew.vin.resize(1);
         txNew.vout.resize(1);
         txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));

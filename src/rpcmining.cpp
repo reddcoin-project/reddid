@@ -60,7 +60,7 @@ Value GetNetworkHashPS(int lookup, int height) {
     if (height >= 0 && height < chainActive.Height())
         pb = chainActive[height];
 
-    if (pb == NULL || !pb->nHeight)
+    if (pb == NULL || !pb->nHeight || pb->nHeight > Params().LastProofOfWorkHeight())
         return 0;
 
     // If lookup is -1, then use blocks since last difficulty change.

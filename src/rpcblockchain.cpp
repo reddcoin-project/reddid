@@ -7,6 +7,7 @@
 #include "main.h"
 #include "sync.h"
 #include "checkpoints.h"
+#include "chainparams.h"
 
 #include <stdint.h>
 
@@ -48,6 +49,17 @@ double GetDifficulty(const CBlockIndex* blockindex)
     return dDiff;
 }
 
+// PoSV
+double GetPoSVKernelPS()
+{
+    const CBlockIndex* pindexBest = chainActive.Tip();
+    if (pindexBest == NULL || pindexBest->nHeight <= Params().LastProofOfWorkHeight() || pindexBest->IsProofOfWork())
+        return 0;
+
+    double dStakeKernelsTriedAvg = GetDifficulty(pindexBest) * 4294967296.0; // 2^32
+    return dStakeKernelsTriedAvg / nTargetSpacing;
+}
+
 
 Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
 {
@@ -75,6 +87,20 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     CBlockIndex *pnext = chainActive.Next(blockindex);
     if (pnext)
         result.push_back(Pair("nextblockhash", pnext->GetBlockHash().GetHex()));
+
+    // PoSV
+    result.push_back(Pair("flags", strprintf("%s", blockindex->IsProofOfStake()? "proof-of-stake" : "proof-of-work")));
+    result.push_back(Pair("moneysupply", ValueFromAmount(blockindex->nMoneySupply)));
+
+    if (block.IsProofOfStake())
+    {
+        result.push_back(Pair("mint", ValueFromAmount(blockindex->nMint)));
+        result.push_back(Pair("entropybit", (int)blockindex->GetStakeEntropyBit()));
+        result.push_back(Pair("modifier", strprintf("%x", blockindex->nStakeModifier)));
+        result.push_back(Pair("modifierchecksum", strprintf("%08x", blockindex->nStakeModifierChecksum)));
+        result.push_back(Pair("signature", HexStr(block.vchBlockSig.begin(), block.vchBlockSig.end())));
+    }
+
     return result;
 }
 
@@ -118,7 +144,7 @@ Value getdifficulty(const Array& params, bool fHelp)
             "getdifficulty\n"
             "\nReturns the proof-of-work difficulty as a multiple of the minimum difficulty.\n"
             "\nResult:\n"
-            "n.nnn       (numeric) the proof-of-work difficulty as a multiple of the minimum difficulty.\n"
+            "n.nnn       (numeric) the difficulty as a multiple of the minimum difficulty.\n"
             "\nExamples:\n"
             + HelpExampleCli("getdifficulty", "")
             + HelpExampleRpc("getdifficulty", "")

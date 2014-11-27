@@ -4,8 +4,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "core.h"
-
 #include "util.h"
+#include "chainparams.h"
+#include "kernel.h"
 
 std::string COutPoint::ToString() const
 {
@@ -137,10 +138,67 @@ double CTransaction::ComputePriority(double dPriorityInputs, unsigned int nTxSiz
     return dPriorityInputs / nTxSize;
 }
 
+// PoSV: total coin age spent in transaction, in the unit of coin-days.
+// Only those coins meeting minimum age requirement counts. As those
+// transactions not in main chain are not currently indexed so we
+// might not find out about their coin age. Older transactions are
+// guaranteed to be in main chain by sync-checkpoint. This rule is
+// introduced to help nodes establish a consistent view of the coin
+// age (trust score) of competing branches.
+uint64_t CTransaction::GetCoinAge() const
+{
+    CBigNum bnCentSecond = 0;  // coin age in the unit of cent-seconds
+    uint64_t nCoinAge = 0;
+
+    if (IsCoinBase())
+        return 0;
+
+    BOOST_FOREACH(const CTxIn& txin, vin)
+    {
+        // First try finding the previous transaction in database
+        CTransaction txPrev;
+        uint256 hashTxPrev = txin.prevout.hash;
+        uint256 hashBlock = 0;
+        if (!GetTransaction(hashTxPrev, txPrev, hashBlock, true))
+            continue;  // previous transaction not in main chain
+
+        // Read block header
+        CBlock block;
+        if (!mapBlockIndex.count(hashBlock))
+            return 0; // unable to read block of previous transaction
+        if (!ReadBlockFromDisk(block, mapBlockIndex[hashBlock]))
+            return 0; // unable to read block of previous transaction
+        if (block.nTime + Params().StakeMinAge() > nTime)
+            continue; // only count coins meeting min age requirement
+
+        // deal with missing timestamps in PoW blocks
+        if (txPrev.nTime == 0)
+            txPrev.nTime = block.nTime;
+
+        if (nTime < txPrev.nTime)
+            return 0;  // Transaction timestamp violation
+
+        int64_t nValueIn = txPrev.vout[txin.prevout.n].nValue;
+        int64_t nTimeWeight = GetCoinAgeWeight(txPrev.nTime, nTime);
+        bnCentSecond += CBigNum(nValueIn) * nTimeWeight / CENT;
+
+        if (fDebug && GetBoolArg("-printcoinage", false))
+            LogPrintf("coin age nValueIn=%s nTime=%d, txPrev.nTime=%d, nTimeWeight=%s bnCentSecond=%s\n",
+                nValueIn, nTime, txPrev.nTime, nTimeWeight, bnCentSecond.ToString().c_str());
+    }
+
+    CBigNum bnCoinDay = bnCentSecond * CENT / COIN / (24 * 60 * 60);
+    if (fDebug && GetBoolArg("-printcoinage", false))
+        LogPrintf("coin age bnCoinDay=%s\n", bnCoinDay.ToString().c_str());
+    nCoinAge = bnCoinDay.getuint64();
+    return nCoinAge;
+}
+
 std::string CTransaction::ToString() const
 {
     std::string str;
-    str += strprintf("CTransaction(hash=%s, ver=%d, vin.size=%u, vout.size=%u, nLockTime=%u, nTime=%u)\n",
+    str += IsCoinBase()? "Coinbase" : (IsCoinStake()? "Coinstake" : "CTransaction");
+    str += strprintf("(hash=%s, ver=%d, vin.size=%u, vout.size=%u, nLockTime=%u, nTime=%u)\n",
         GetHash().ToString().substr(0,10),
         nVersion,
         vin.size(),
@@ -216,6 +274,45 @@ uint64_t CTxOutCompressor::DecompressAmount(uint64_t x)
 uint256 CBlockHeader::GetHash() const
 {
     return Hash(BEGIN(nVersion), END(nNonce));
+}
+
+// PoSV: total coin age spent in block, in the unit of coin-days.
+uint64_t CBlock::GetCoinAge() const
+{
+    uint64_t nCoinAge = 0;
+
+    BOOST_FOREACH(const CTransaction& tx, vtx)
+        nCoinAge += tx.GetCoinAge();
+
+    if (fDebug && GetBoolArg("-printcoinage", false))
+        LogPrintf("block coin age total nCoinDays=%s\n", nCoinAge);
+    return nCoinAge;
+}
+
+// PoSV
+bool CBlock::CheckBlockSignature() const
+{
+    if (IsProofOfWork())
+        return vchBlockSig.empty();
+
+    std::vector<std::vector<unsigned char> > vSolutions;
+    txnouttype whichType;
+
+    const CTxOut& txout = vtx[1].vout[1];
+
+    if (!Solver(txout.scriptPubKey, whichType, vSolutions))
+        return false;
+
+    if (whichType == TX_PUBKEY)
+    {
+        std::vector<unsigned char>& vchPubKey = vSolutions[0];
+        CPubKey key(vchPubKey);
+        if (vchBlockSig.empty())
+            return false;
+        return key.Verify(GetHash(), vchBlockSig);
+    }
+
+    return false;
 }
 
 uint256 CBlock::BuildMerkleTree() const
