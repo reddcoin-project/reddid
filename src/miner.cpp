@@ -10,10 +10,11 @@
 #include "net.h"
 #ifdef ENABLE_WALLET
 #include "wallet.h"
+#include "kernel.h"
 #endif
 //////////////////////////////////////////////////////////////////////////////
 //
-// BitcoinMiner
+// ReddcoinMiner
 //
 
 int static FormatHashBlocks(void* pbuffer, unsigned int len)
@@ -79,6 +80,7 @@ public:
 
 uint64_t nLastBlockTx = 0;
 uint64_t nLastBlockSize = 0;
+int64_t nLastCoinStakeSearchInterval = 0;
 
 // We want to sort transactions by priority and fee, so:
 typedef boost::tuple<double, double, const CTransaction*> TxPriority;
@@ -104,6 +106,7 @@ public:
     }
 };
 
+// create new block (without proof-of-work/proof-of-stake)
 CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
 {
     // Create new block
@@ -112,12 +115,31 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         return NULL;
     CBlock *pblock = &pblocktemplate->block; // pointer for convenience
 
+    bool fProofOfStake = chainActive.Tip()->nHeight >= Params().LastProofOfWorkHeight();
+
     // Create coinbase tx
     CTransaction txNew;
     txNew.vin.resize(1);
     txNew.vin[0].prevout.SetNull();
     txNew.vout.resize(1);
-    txNew.vout[0].scriptPubKey = scriptPubKeyIn;
+
+    if (!fProofOfStake)
+    {
+        if (fDebug)
+           LogPrintf("CreateNewBlock : new PoW block\n");
+
+        txNew.vout[0].scriptPubKey = scriptPubKeyIn;
+    }
+    else
+    {
+        if (fDebug)
+            LogPrintf("CreateNewBlock : new PoSV block\n");
+
+        // Height first in coinbase required for block.version=2
+        txNew.vin[0].scriptSig = (CScript() << chainActive.Tip()->nHeight+1) + COINBASE_FLAGS;
+        assert(txNew.vin[0].scriptSig.size() <= 100);
+        txNew.vout[0].SetEmpty();
+    }
 
     // Add our coinbase tx as first transaction
     pblock->vtx.push_back(txNew);
@@ -158,7 +180,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
              mi != mempool.mapTx.end(); ++mi)
         {
             const CTransaction& tx = mi->second.GetTx();
-            if (tx.IsCoinBase() || !IsFinalTx(tx, pindexPrev->nHeight + 1))
+            if (tx.IsCoinBase() || tx.IsCoinStake() || !IsFinalTx(tx, pindexPrev->nHeight + 1))
                 continue;
 
             COrphan* porphan = NULL;
@@ -253,6 +275,10 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
             if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS)
                 continue;
 
+            // Timestamp limit
+            if (fProofOfStake && tx.nTime > pblock->vtx[0].nTime)
+                continue;
+
             // Skip free transactions if we're past the minimum block size:
             if (fSortedByFee && (dFeePerKb < CTransaction::nMinRelayTxFee) && (nBlockSize + nTxSize >= nBlockMinSize))
                 continue;
@@ -321,7 +347,9 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         nLastBlockSize = nBlockSize;
         LogPrintf("CreateNewBlock(): total size %u\n", nBlockSize);
 
-        pblock->vtx[0].vout[0].nValue = GetBlockValue(pindexPrev->nHeight+1, nFees);
+        if (!fProofOfStake)
+            pblock->vtx[0].vout[0].nValue = GetBlockValue(pindexPrev->nHeight+1, nFees);
+
         pblocktemplate->vTxFees[0] = -nFees;
 
         // Fill in header
@@ -465,20 +493,22 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
     uint256 hash = pblock->GetHash();
     uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
 
+    if(!pblock->IsProofOfWork())
+        return error("CheckWork() : %s is not a proof-of-work block", hash.GetHex().c_str());
     if (hash > hashTarget)
         return false;
 
     //// debug print
-    LogPrintf("BitcoinMiner:\n");
+    LogPrintf("ReddcoinMiner:\n");
     LogPrintf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex(), hashTarget.GetHex());
     pblock->print();
-    LogPrintf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue));
+    LogPrintf("mined %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue));
 
     // Found a solution
     {
         LOCK(cs_main);
         if (pblock->hashPrevBlock != chainActive.Tip()->GetBlockHash())
-            return error("BitcoinMiner : generated block is stale");
+            return error("ReddcoinMiner : mined block is stale");
 
         // Remove key from key pool
         reservekey.KeepKey();
@@ -486,16 +516,117 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
         // Track how many getdata requests this block gets
         {
             LOCK(wallet.cs_wallet);
-            wallet.mapRequestCount[pblock->GetHash()] = 0;
+            wallet.mapRequestCount[hash] = 0;
         }
 
         // Process this block the same as if we had received it from another node
         CValidationState state;
         if (!ProcessBlock(state, NULL, pblock))
-            return error("BitcoinMiner : ProcessBlock, block not accepted");
+            return error("ReddcoinMiner : ProcessBlock, block not accepted");
     }
 
     return true;
+}
+
+bool CheckStake(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
+{
+    uint256 hash = pblock->GetHash();
+    uint256 hashStake = 0, hashTarget = 0;
+
+    if(!pblock->IsProofOfStake())
+        return error("CheckStake() : %s is not a proof-of-stake block", hash.GetHex().c_str());
+
+    // verify hash target and signature of coinstake tx
+    if (!CheckProofOfStake(pblock->vtx[1], pblock->nBits, hashStake, hashTarget))
+        return error("CheckStake() : proof-of-stake checking failed");
+
+    //// debug print
+    LogPrintf("ReddcoinStaker:\n");
+    LogPrintf("proof-of-stake found  \n  hash: %s\n  stake: %s\n  target: %s\n", hash.GetHex(), hashStake.GetHex(), hashTarget.GetHex());
+    pblock->print();
+    LogPrintf("minted %s\n", FormatMoney(pblock->vtx[1].GetValueOut()));
+
+    // Found a solution
+    {
+        LOCK(cs_main);
+        if (pblock->hashPrevBlock != chainActive.Tip()->GetBlockHash())
+            return error("ReddcoinStaker : minted block is stale");
+
+        // Remove key from key pool
+        reservekey.KeepKey();
+
+        // Track how many getdata requests this block gets
+        {
+            LOCK(wallet.cs_wallet);
+            wallet.mapRequestCount[hash] = 0;
+        }
+
+        // Process this block the same as if we had received it from another node
+        CValidationState state;
+        if (!ProcessBlock(state, NULL, pblock))
+            return error("ReddcoinStaker : ProcessBlock, block not accepted");
+    }
+
+    return true;
+}
+
+void ReddcoinStaker(CWallet *pwallet)
+{
+    LogPrintf("ReddcoinStaker started\n");
+    SetThreadPriority(THREAD_PRIORITY_LOWEST);
+
+    // Make this thread recognisable as the staking thread
+    RenameThread("reddcoin-staker");
+    CReserveKey reservekey(pwallet);
+
+    try { while (true) {
+        if (Params().NetworkID() != CChainParams::REGTEST) {
+            // Busy-wait for the network to come online so we don't waste time mining
+            // on an obsolete chain. In regtest mode we expect to fly solo.
+            while (vNodes.empty())
+            {
+                nLastCoinStakeSearchInterval = 0;
+                MilliSleep(1000);
+            }
+        }
+
+        while (pwallet->IsLocked())
+        {
+            nLastCoinStakeSearchInterval = 0;
+            MilliSleep(1000);
+        }
+
+        while (chainActive.Tip()->nHeight < Params().LastProofOfWorkHeight())
+            MilliSleep(60000);
+
+        //
+        // Create a new block
+        //
+        auto_ptr<CBlockTemplate> pblocktemplate(CreateNewBlockWithKey(reservekey));
+        if (!pblocktemplate.get())
+            return;
+        CBlock *pblock = &pblocktemplate->block;
+        int64_t nFees = pblocktemplate->vTxFees[0] * -1;
+
+        // Trying to sign the PoSV block
+        if (pwallet->SignBlock(pblock, nFees))
+        {
+            SetThreadPriority(THREAD_PRIORITY_NORMAL);
+            CheckStake(pblock, *pwallet, reservekey);
+            SetThreadPriority(THREAD_PRIORITY_LOWEST);
+            MilliSleep(500);
+        }
+        else
+        {
+            // LogPrintf("ReddcoinStaker : Failed to sign the new block.\n");
+            MilliSleep(1000);
+        }
+    } }
+    catch (boost::thread_interrupted)
+    {
+        LogPrintf("ReddcoinStaker terminated\n");
+        throw;
+    }
 }
 
 void static ReddcoinMiner(CWallet *pwallet)

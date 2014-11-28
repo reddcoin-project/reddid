@@ -9,10 +9,12 @@
 #include "crypter.h"
 #include "key.h"
 #include "keystore.h"
+#include "txdb.h"
 #include "main.h"
 #include "ui_interface.h"
 #include "util.h"
 #include "walletdb.h"
+#include "kernel.h"
 
 #include <algorithm>
 #include <map>
@@ -26,6 +28,7 @@
 // Settings
 extern int64_t nTransactionFee;
 extern bool bSpendZeroConfChange;
+extern bool fWalletUnlockStakingOnly;
 
 // -paytxfee default
 static const int64_t DEFAULT_TRANSACTION_FEE = 0;
@@ -101,6 +104,7 @@ class CWallet : public CCryptoKeyStore, public CWalletInterface
 {
 private:
     bool SelectCoins(int64_t nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet, const CCoinControl *coinControl = NULL) const;
+    bool SelectCoinsSimple(int64_t nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet, unsigned int nSpendTime, int nMinConf) const;
 
     CWalletDB *pwalletdbEncryption;
 
@@ -184,6 +188,7 @@ public:
     bool CanSupportFeature(enum WalletFeature wf) { AssertLockHeld(cs_wallet); return nWalletMaxVersion >= wf; }
 
     void AvailableCoins(std::vector<COutput>& vCoins, bool fOnlyConfirmed=true, const CCoinControl *coinControl = NULL) const;
+    void AvailableCoinsMinConf(std::vector<COutput>& vCoins, int nConf) const;
     bool SelectCoinsMinConf(int64_t nTargetValue, int nConfMine, int nConfTheirs, std::vector<COutput> vCoins, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet) const;
 
     bool IsSpent(const uint256& hash, unsigned int n) const;
@@ -260,6 +265,12 @@ public:
     bool CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey);
     std::string SendMoney(CScript scriptPubKey, int64_t nValue, CWalletTx& wtxNew);
     std::string SendMoneyToDestination(const CTxDestination &address, int64_t nValue, CWalletTx& wtxNew);
+
+    // PoSV
+    int64_t GetStake() const;
+    bool GetStakeWeight(uint64_t& nAverageWeight, uint64_t& nTotalWeight);
+    bool CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64_t nFees, CTransaction& txNew, CKey& key);
+    bool SignBlock(CBlock *pblock, int64_t nFees);
 
     bool NewKeyPool();
     bool TopUpKeyPool(unsigned int kpSize = 0);
@@ -349,6 +360,8 @@ public:
     bool DelAddressBook(const CTxDestination& address);
 
     void UpdatedTransaction(const uint256 &hashTx);
+
+    bool GetTransaction(const uint256 &hash, CTransaction &txOut, uint256 &hashBlock, bool fAllowSlow);
 
     void Inventory(const uint256 &hash)
     {
@@ -590,7 +603,7 @@ public:
     int64_t GetCredit(bool fUseCache=true) const
     {
         // Must wait until coinbase is safely deep enough in the chain before valuing it
-        if (IsCoinBase() && GetBlocksToMaturity() > 0)
+        if ((IsCoinBase() || IsCoinStake()) && GetBlocksToMaturity() > 0)
             return 0;
 
         // GetBalance can assume transactions in mapWallet won't change
@@ -621,7 +634,7 @@ public:
             return 0;
 
         // Must wait until coinbase is safely deep enough in the chain before valuing it
-        if (IsCoinBase() && GetBlocksToMaturity() > 0)
+        if ((IsCoinBase() || IsCoinStake()) && GetBlocksToMaturity() > 0)
             return 0;
 
         if (fUseCache && fAvailableCreditCached)

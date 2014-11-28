@@ -119,7 +119,7 @@ Value getgenerate(const Array& params, bool fHelp)
         throw runtime_error(
             "getgenerate\n"
             "\nReturn if the server is set to generate coins or not. The default is false.\n"
-            "It is set with the command line argument -gen (or bitcoin.conf setting gen)\n"
+            "It is set with the command line argument -staking (or reddcoin.conf setting staking)\n"
             "It can also be set with the setgenerate call.\n"
             "\nResult\n"
             "true|false      (boolean) If the server is set to generate coins or not\n"
@@ -131,7 +131,7 @@ Value getgenerate(const Array& params, bool fHelp)
     if (!pMiningKey)
         return false;
 
-    return GetBoolArg("-gen", false);
+    return GetBoolArg("-staking", true);
 }
 
 
@@ -203,7 +203,7 @@ Value setgenerate(const Array& params, bool fHelp)
     }
     else // Not -regtest: start generate thread, return immediately
     {
-        mapArgs["-gen"] = (fGenerate ? "1" : "0");
+        mapArgs["-staking"] = (fGenerate ? "1" : "0");
         mapArgs ["-genproclimit"] = itostr(nGenProcLimit);
         GenerateReddcoins(fGenerate, pwalletMain, nGenProcLimit);
     }
@@ -262,19 +262,64 @@ Value getmininginfo(const Array& params, bool fHelp)
     obj.push_back(Pair("currentblocktx",   (uint64_t)nLastBlockTx));
     obj.push_back(Pair("difficulty",       (double)GetDifficulty()));
     obj.push_back(Pair("errors",           GetWarnings("statusbar")));
-    obj.push_back(Pair("genproclimit",     (int)GetArg("-genproclimit", -1)));
+    obj.push_back(Pair("genproclimit",     (int)GetArg("-genproclimit", 0)));
     obj.push_back(Pair("networkhashps",    getnetworkhashps(params, false)));
     obj.push_back(Pair("pooledtx",         (uint64_t)mempool.size()));
     obj.push_back(Pair("testnet",          TestNet()));
 #ifdef ENABLE_WALLET
     obj.push_back(Pair("generate",         getgenerate(params, false)));
     obj.push_back(Pair("hashespersec",     gethashespersec(params, false)));
+
+    // PoSV
+    uint64_t nAverageWeight = 0, nTotalWeight = 0;
+    pwalletMain->GetStakeWeight(nAverageWeight, nTotalWeight);
+    Object weight;
+    weight.push_back(Pair("average", nAverageWeight));
+    weight.push_back(Pair("total", nTotalWeight));
+    obj.push_back(Pair("stakeweight", weight));
+    obj.push_back(Pair("stakeinterest",  (uint64_t)COIN_YEAR_REWARD));
+    obj.push_back(Pair("netstakeweight", (uint64_t)GetPoSVKernelPS()));
 #endif
     return obj;
 }
 
 
 #ifdef ENABLE_WALLET
+// PoSV
+Value getstakinginfo(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getstakinginfo\n"
+            "Returns an object containing staking-related information.");
+
+    uint64_t nAverageWeight = 0, nTotalWeight = 0;
+    pwalletMain->GetStakeWeight(nAverageWeight, nTotalWeight);
+
+    uint64_t nNetworkWeight = GetPoSVKernelPS();
+    bool staking = nLastCoinStakeSearchInterval && nAverageWeight;
+    uint64_t nExpectedTime = nTargetSpacing * nNetworkWeight / nTotalWeight;
+
+    Object obj;
+
+    obj.push_back(Pair("enabled", GetBoolArg("-staking", true)));
+    obj.push_back(Pair("staking", staking));
+
+    obj.push_back(Pair("currentblocksize", (uint64_t)nLastBlockSize));
+    obj.push_back(Pair("currentblocktx", (uint64_t)nLastBlockTx));
+    obj.push_back(Pair("pooledtx", (uint64_t)mempool.size()));
+
+    obj.push_back(Pair("difficulty", (double)GetDifficulty(GetLastBlockIndex(chainActive.Tip(), true))));
+    obj.push_back(Pair("search-interval", (int)nLastCoinStakeSearchInterval));
+
+    obj.push_back(Pair("averageweight", nAverageWeight));
+    obj.push_back(Pair("totalweight", nTotalWeight));
+    obj.push_back(Pair("netstakeweight", nNetworkWeight));
+    obj.push_back(Pair("expectedtime", staking ? nExpectedTime : -1));
+
+    return obj;
+}
+
 Value getwork(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
@@ -303,6 +348,9 @@ Value getwork(const Array& params, bool fHelp)
 
     if (IsInitialBlockDownload())
         throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin is downloading blocks...");
+
+    if (chainActive.Tip()->nHeight >= Params().LastProofOfWorkHeight())
+        throw JSONRPCError(RPC_MISC_ERROR, "No more PoW blocks");
 
     typedef map<uint256, pair<CBlock*, CScript> > mapNewBlock_t;
     static mapNewBlock_t mapNewBlock;    // FIXME: thread safety
@@ -485,6 +533,9 @@ Value getblocktemplate(const Array& params, bool fHelp)
 
     if (IsInitialBlockDownload())
         throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin is downloading blocks...");
+
+    if (chainActive.Tip()->nHeight >= Params().LastProofOfWorkHeight())
+        throw JSONRPCError(RPC_MISC_ERROR, "No more PoW blocks");
 
     // Update block
     static unsigned int nTransactionsUpdatedLast;

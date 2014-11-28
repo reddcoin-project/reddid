@@ -314,6 +314,11 @@ static const CRPCCommand vRPCCommands[] =
     { "gethashespersec",        &gethashespersec,        true,      false,      false },
     { "getwork",                &getwork,                true,      false,      true  },
     { "setgenerate",            &setgenerate,            true,      true,       false },
+
+    /* PoSV */
+    { "getstakinginfo",         &getstakinginfo,         true,      false,      false },
+    { "reservebalance",         &reservebalance,         false,     false,      false },
+    { "getinterest",            &getinterest,            false,     false,      true },
 #endif // ENABLE_WALLET
 };
 
