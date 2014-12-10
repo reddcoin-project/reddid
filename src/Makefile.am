@@ -54,6 +54,8 @@ BITCOIN_CORE_H = \
   net.h \
   noui.h \
   protocol.h \
+  redddb.h \
+  reddid.h \
   rpcclient.h \
   rpcprotocol.h \
   rpcserver.h \
@@ -131,6 +133,8 @@ libbitcoin_common_a_SOURCES = \
   key.cpp \
   netbase.cpp \
   protocol.cpp \
+  redddb.cpp \
+  reddid.cpp \
   rpcprotocol.cpp \
   script.cpp \
   sync.cpp \

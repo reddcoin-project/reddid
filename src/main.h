@@ -265,6 +265,26 @@ struct CDiskTxPos : public CDiskBlockPos
     }
 };
 
+class CNameIndex
+{
+public:
+    CDiskTxPos txPos;
+    unsigned int nHeight;
+    std::vector<unsigned char> vValue;
+
+    CNameIndex() {
+    }
+
+    CNameIndex(const CDiskTxPos &txPosIn, unsigned int nHeightIn, const std::vector<unsigned char> &vValueIn) : txPos(txPosIn), nHeight(nHeightIn), vValue(vValueIn) {
+    }
+
+    IMPLEMENT_SERIALIZE
+    (
+        READWRITE(txPos);
+        READWRITE(nHeight);
+        READWRITE(vValue);
+    )
+};
 
 
 enum GetMinFee_mode
@@ -599,6 +619,7 @@ public:
 bool WriteBlockToDisk(CBlock& block, CDiskBlockPos& pos);
 bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos);
 bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex);
+bool ReadTxFromDisk(CTransaction &tx, const CDiskTxPos& pos);
 
 
 /** Functions for validating blocks and updating the block tree */

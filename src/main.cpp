@@ -1181,6 +1181,32 @@ bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex)
     return true;
 }
 
+bool ReadTxFromDisk(CTransaction &tx, const CDiskTxPos& pos)
+{
+    CBlock block;
+
+    // Open history file to read
+    CAutoFile filein = CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
+    if (!filein)
+        return error("ReadTxFromDisk : OpenBlockFile failed");
+
+    // Read block
+    try {
+        filein >> block;
+        fseek(filein, pos.nTxOffset, SEEK_CUR);
+        filein >> tx;
+    }
+    catch (std::exception &e) {
+        return error("%s : Deserialize or I/O error - %s", __func__, e.what());
+    }
+
+    // Check the header
+    if (block.IsProofOfWork() && !CheckProofOfWork(block.GetHash(), block.nBits))
+        return error("ReadTxFromDisk : Errors in block header");
+
+    return true;
+}
+
 uint256 static GetOrphanRoot(const uint256& hash)
 {
     map<uint256, COrphanBlock*>::iterator it = mapOrphanBlocks.find(hash);
